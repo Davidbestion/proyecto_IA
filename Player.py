@@ -14,7 +14,7 @@ class Player:
 class MiniMaxPlayer(Player):
     def __init__(self, player_id):
         super().__init__(player_id)
-        self.TOP_MOVES = 10  # Número de movimientos a considerar en la heurística
+        self.TOP_MOVES = 15  # Número de movimientos a considerar en la heurística
         self.directions = [
             (0, -1),   # Izquierda
             (0, 1),    # Derecha
@@ -119,13 +119,25 @@ class MiniMaxPlayer(Player):
             return float('inf')
         if winner == 3 - player_id:
             return -float('inf')
+        
         dijkstra_distance = self.dijkstra_heuristic(board, player_id)
         # center_control = self.center_control(board, player_id)
         my_bridges = self.find_bridges(board, player_id)
-        enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
+        
+        # enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
         # enemy_center_control = self.center_control(board, 3 - player_id)
-        enemy_bridges = self.find_bridges(board, 3 - player_id)
-        return 0.7 * dijkstra_distance + 0.3 * my_bridges - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_bridges
+        # enemy_bridges = self.find_bridges(board, 3 - player_id)
+        
+        if my_bridges == 0:
+            my_h = dijkstra_distance
+        else:
+            my_h = 0.6 * dijkstra_distance + 0.4 * my_bridges
+        
+        # if enemy_bridges == 0:
+        #     enemy_h = enemy_dijkstra_distance
+        # else:
+        #     enemy_h = 0.6 * enemy_dijkstra_distance + 0.4 * enemy_bridges
+        return my_h #- enemy_h
         # return 0.7 * dijkstra_distance + 0.3 * center_control - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_center_control
         
     def center_control(self, board, player_id):
@@ -202,9 +214,9 @@ class MiniMaxPlayer(Player):
     
     def _get_empty_adyacents(self, board, row, col):
         ady = []
-        for dr, dc in self.direction:
+        for dr, dc in self.directions:
             nr, nc = row + dr, col + dc
-            if 0 <= nr < board.size or 0 <= nc < board.size or board.board[nr][nc] == 0:
+            if 0 <= nr < board.size and 0 <= nc < board.size and board.board[nr][nc] == 0:
                 ady.append((nr,nc))
         return ady
             
@@ -217,16 +229,16 @@ class MiniMaxPlayer(Player):
         size = board.size
         count_bridges = 0
         adyacents = {}
-        player_cells = []
+        # player_cells = []
         # Recolecto las casillas adyacentes a cada casilla en la que he jugado
         for i in range(size):
             for j in range(size):
                 if board.board[i][j] != player_id: continue
                 # if not (i,j) in adyacents.keys():
-                player_cells.append((i,j))
+                # player_cells.append((i,j))
                 adyacents[(i,j)] = self._get_empty_adyacents(board, i, j)
 
-        for (c1, c2) in combinations(player_cells, 2):
+        for (c1, c2) in combinations(adyacents.keys(), 2):
             if abs(c1[0] - c2[0]) <= 2 and abs(c1[1] - c2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
                 # Verifico si hay un puente entre ellos
                 # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos

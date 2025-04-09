@@ -1,6 +1,6 @@
 import os
 from hex_board import HexBoard
-from player import MiniMaxPlayer as IAPlayer
+from Player import MiniMaxPlayer as IAPlayer
 import time
 
 
