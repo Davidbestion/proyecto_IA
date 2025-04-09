@@ -1,7 +1,7 @@
 from hex_board import HexBoard
 import heapq
 import random
-import itertools
+from itertools import combinations
 
 class Player:
     def __init__(self, player_id: int):
@@ -120,10 +120,13 @@ class MiniMaxPlayer(Player):
         if winner == 3 - player_id:
             return -float('inf')
         dijkstra_distance = self.dijkstra_heuristic(board, player_id)
-        center_control = self.center_control(board, player_id)
+        # center_control = self.center_control(board, player_id)
+        my_bridges = self.find_bridges(board, player_id)
         enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
-        enemy_center_control = self.center_control(board, 3 - player_id)
-        return 0.7 * dijkstra_distance + 0.3 * center_control - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_center_control
+        # enemy_center_control = self.center_control(board, 3 - player_id)
+        enemy_bridges = self.find_bridges(board, 3 - player_id)
+        return 0.7 * dijkstra_distance + 0.3 * my_bridges - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_bridges
+        # return 0.7 * dijkstra_distance + 0.3 * center_control - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_center_control
         
     def center_control(self, board, player_id):
         size = board.size
@@ -201,9 +204,8 @@ class MiniMaxPlayer(Player):
         ady = []
         for dr, dc in self.direction:
             nr, nc = row + dr, col + dc
-            if board.board[nr][nc] != 0:
-                continue
-            ady.append((nr,nc))
+            if 0 <= nr < board.size or 0 <= nc < board.size or board.board[nr][nc] == 0:
+                ady.append((nr,nc))
         return ady
             
     # def _get_all_pairs(elements:list):
@@ -211,25 +213,36 @@ class MiniMaxPlayer(Player):
         
     
     def find_bridges(self, board, player_id):
+        """Encuentra los puentes en el tablero para el jugador dado"""
         size = board.size
         count_bridges = 0
         adyacents = {}
+        player_cells = []
         # Recolecto las casillas adyacentes a cada casilla en la que he jugado
         for i in range(size):
             for j in range(size):
                 if board.board[i][j] != player_id: continue
                 # if not (i,j) in adyacents.keys():
+                player_cells.append((i,j))
                 adyacents[(i,j)] = self._get_empty_adyacents(board, i, j)
 
-        
-        for element1 in adyacents.keys():
-            for element2 in adyacents.keys():
-                if element1 != element2 and abs(element1[0] - element2[0]) <= 2 and abs(element1[1] - element2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
-                    # Verifico si hay un puente entre ellos
-                    # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
-                    # Luego, hay un puente entre ellos
-                    if len(set(adyacents[element1]).intersection(set(adyacents[element2]))) == 2:
-                        count_bridges += 1
+        for (c1, c2) in combinations(player_cells, 2):
+            if abs(c1[0] - c2[0]) <= 2 and abs(c1[1] - c2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
+                # Verifico si hay un puente entre ellos
+                # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
+                # Luego, hay un puente entre ellos
+                if len(set(adyacents[c1]).intersection(set(adyacents[c2]))) >= 2:
+                    count_bridges += 1
+                    
+                    
+        # for element1 in adyacents.keys():
+        #     for element2 in adyacents.keys():
+        #         if element1 != element2 and abs(element1[0] - element2[0]) <= 2 and abs(element1[1] - element2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
+        #             # Verifico si hay un puente entre ellos
+        #             # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
+        #             # Luego, hay un puente entre ellos
+        #             if len(set(adyacents[element1]).intersection(set(adyacents[element2]))) == 2:
+        #                 count_bridges += 1
         return count_bridges
                         
         
