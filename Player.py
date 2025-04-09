@@ -1,6 +1,7 @@
 from hex_board import HexBoard
 import heapq
 import random
+import itertools
 
 class Player:
     def __init__(self, player_id: int):
@@ -14,6 +15,14 @@ class MiniMaxPlayer(Player):
     def __init__(self, player_id):
         super().__init__(player_id)
         self.TOP_MOVES = 10  # Número de movimientos a considerar en la heurística
+        self.directions = [
+            (0, -1),   # Izquierda
+            (0, 1),    # Derecha
+            (-1, 0),   # Arriba
+            (1, 0),    # Abajo
+            (-1, 1),   # Arriba derecha
+            (1, -1)    # Abajo izquierda
+        ]
     
     def play(self, board: HexBoard, depth = 6) -> tuple:
         _, best_move = self.minimax(board, depth, -float('inf'), float('inf'), self.player_id, True)
@@ -102,12 +111,6 @@ class MiniMaxPlayer(Player):
         result.sort(reverse=(player == max_player))
         return [move for _, move in result]
         
-        # return sorted(moves,
-        #             key=lambda m: self.heuristic(board.clone().place_piece(m[0], m[1], player), self.player_id), 
-        #             reverse=(player == max_player))
-        # return sorted(moves, 
-        #             key=lambda m: self.heuristic(board.clone().place_piece(m, player), self.player_id), 
-        #             reverse=(player == max_player))
     
     def heuristic(self, board, player_id):
         """Heurística que combina la distancia de Dijkstra y el control del centro"""
@@ -163,14 +166,14 @@ class MiniMaxPlayer(Player):
         #     (-1, 1),  # Arriba-Derecha
         #     (1, 1)    # Abajo-Derecha
         # ]
-        directions = [
-            (0, -1),   # Izquierda
-            (0, 1),    # Derecha
-            (-1, 0),   # Arriba
-            (1, 0),    # Abajo
-            (-1, 1),   # Arriba derecha
-            (1, -1)    # Abajo izquierda
-        ]
+        # directions = [
+        #     (0, -1),   # Izquierda
+        #     (0, 1),    # Derecha
+        #     (-1, 0),   # Arriba
+        #     (1, 0),    # Abajo
+        #     (-1, 1),   # Arriba derecha
+        #     (1, -1)    # Abajo izquierda
+        # ]
 
         
         while heap:
@@ -184,7 +187,7 @@ class MiniMaxPlayer(Player):
             
             # directions = directions_fila_par if r % 2 == 0 else directions_fila_impar
             
-            for dr, dc in directions:
+            for dr, dc in self.directions:
                 nr, nc = r + dr, c + dc
                 if 0 <= nr < size and 0 <= nc < size and distances[nr][nc] != -1:
                     cost = 0 if board.board[nr][nc] == player_id else 1
@@ -193,3 +196,42 @@ class MiniMaxPlayer(Player):
                         distances[nr][nc] = new_dist
                         heapq.heappush(heap, (new_dist, nr, nc))
         return -float('inf')
+    
+    def _get_empty_adyacents(self, board, row, col):
+        ady = []
+        for dr, dc in self.direction:
+            nr, nc = row + dr, col + dc
+            if board.board[nr][nc] != 0:
+                continue
+            ady.append((nr,nc))
+        return ady
+            
+    # def _get_all_pairs(elements:list):
+    #     return list(itertools.combinations(elements, 2))
+        
+    
+    def find_bridges(self, board, player_id):
+        size = board.size
+        count_bridges = 0
+        adyacents = {}
+        # Recolecto las casillas adyacentes a cada casilla en la que he jugado
+        for i in range(size):
+            for j in range(size):
+                if board.board[i][j] != player_id: continue
+                # if not (i,j) in adyacents.keys():
+                adyacents[(i,j)] = self._get_empty_adyacents(board, i, j)
+
+        
+        for element1 in adyacents.keys():
+            for element2 in adyacents.keys():
+                if element1 != element2 and abs(element1[0] - element2[0]) <= 2 and abs(element1[1] - element2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
+                    # Verifico si hay un puente entre ellos
+                    # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
+                    # Luego, hay un puente entre ellos
+                    if len(set(adyacents[element1]).intersection(set(adyacents[element2]))) == 2:
+                        count_bridges += 1
+        return count_bridges
+                        
+        
+        
+                
