@@ -1,202 +1,83 @@
-import HexBoard as Game
-import Player as AI
+import os
+from hex_board import HexBoard
+from player import MiniMaxPlayer as IAPlayer
+import time
+
+
+def clear_console():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def main():
-    size = 5
-    game = Game.HexBoard(size)
-    
-    # Configurar jugadores
-    player1 = AI.MiniMaxPlayer(1)
-    player2 = AI.MonteCarloPlayer(2)
-    
+    print("Bienvenido a HEX")
+    try:
+        size = int(input("Ingrese el tamaño del tablero (por ejemplo, 5): "))
+    except ValueError:
+        print("Tamaño inválido. Usando tamaño 5 por defecto.")
+        size = 5
+
+    board = HexBoard(size)
+
+    # Game mode:
+    # 1: Dos jugadores humanos
+    # 2: Humano (jugador 1) vs. IA (jugador 2)
+    # 3: IA vs IA
+    mode = input("Seleccione modo de juego (1: Humano vs Humano, 2: Humano vs IA, 3: IA vs IA): ")
+
+    if mode == "2":
+        human_player = int(input("Elija su identificador (1 para 🔴, 2 para 🔵): "))
+        ai_player = 2 if human_player == 1 else 1
+        player_objects = {
+            human_player: None,  # Humano: Él hace su propio input
+           ai_player: IAPlayer(ai_player)
+        }
+    elif mode == "3":
+        player_objects = {
+            1: IAPlayer(1),  # IA
+            2: IAPlayer(2)   # IA
+        }
+    else:
+        player_objects = {
+            1: None,  # Humano
+            2: None   # Humano
+        }
+
     current_player = 1
-    moves_history = []
-    
     while True:
-        print("\033c", end="")  # Limpiar pantalla
-        print(f"=== Turno {len(moves_history)+1} ===")
-        print_hex_board(game, moves_history)
-        
-        # Mostrar últimos 3 movimientos
-        if moves_history:
-            print("\nÚltimos movimientos:")
-            for move in moves_history[-3:]:
-                print(f"Jugador {move[2]}: ({move[0]}, {move[1]})")
-        
-        # Obtener movimiento
-        player = player1 if current_player == 1 else player2
-        row, col = player.play(game)
-        
-        # Registrar movimiento
-        moves_history.append((row, col, current_player))
-        game.place_piece(row, col, current_player)
-        
-        # Verificar ganador
-        if game.check_connection(current_player):
-            print("\033c", end="")
-            print_hex_board(game, moves_history)
-            print(f"\n¡Jugador {current_player} gana!")
-            print(f"Total de movimientos: {len(moves_history)}")
+        clear_console()
+        board.print_board()
+
+        if board.check_connection(1):
+            print("¡El jugador 1 (🔴) ha ganado!")
             break
-        
-        # Cambiar jugador
+        if board.check_connection(2):
+            print("¡El jugador 2 (🔵) ha ganado!")
+            break
+        if not board.get_possible_moves():
+            print("Empate. No hay más movimientos disponibles.")
+            break
+
+        print(f"\n \n Turno del jugador {current_player} ({'🔴' if current_player==1 else '🔵'}).")
+
+        if player_objects.get(current_player) is None:
+            # movimiento del humano(por coordenadas)
+            try:
+                move_input = input("Ingrese su movimiento como 'fila columna': ")
+                row, col = map(int, move_input.split())
+            except Exception as e:
+                print("Entrada inválida. Inténtelo de nuevo.")
+                continue
+            if (row, col) not in board.get_possible_moves():
+                print("Movimiento no válido o casilla ocupada. Inténtelo de nuevo.")
+                continue
+            board.place_piece(row, col, current_player)
+        else:
+            move = player_objects[current_player].play(board)
+            print(f"La IA juega en la posición: {move}")
+            board.place_piece(move[0], move[1], current_player)
+
+        # Cambiar turno
         current_player = 2 if current_player == 1 else 1
-# def main():
-#     game = Game.HexBoard(6)
-#     player2 = AI.MiniMaxPlayer(2)
-#     player1 = AI.MonteCarloPlayer(1)
-#     player = True #True - Player 1, False - Player 2
-#     print_hex_board(game)
-#     while True:
-        
-#         if player:
-#             print("Player 1's turn")
-#             row, col = player1.play(game)
-#             game.place_piece(row, col, 1)
-#             print_hex_board(game)
-#             if game.check_connection(1):
-#                 print("Player 1 wins!")
-#                 break
-#         else:
-#             print("Player 2's turn")
-#             row, col = player2.play(game)
-#             game.place_piece(row, col, 2)
-#             print_hex_board(game)
-#             if game.check_connection(2):
-#                 print("Player 2 wins!")
-#                 break
-#         player = not player
+        time.sleep(0.7)
 
-def print_hex_board(game: Game.HexBoard, moves_history):
-    """Imprime el tablero Hex con alineación correcta, conexiones visuales y movimientos realizados."""
-    size = game.size
-    cell_width = 3
-
-    # Encabezado de columnas
-    print(" " * (cell_width + 1), end="")
-    for col in range(size):
-        print(f"{col:2} ", end="")
-    print("\n")
-
-    for row in range(size):
-        # Indentación progresiva para efecto hexagonal
-        indent = (size - row - 1) * cell_width // 2
-        print(" " * indent, end="")
-        
-        # Número de fila
-        print(f"{row:2} ", end="")
-        
-        # Contenido de la fila
-        for col in range(size):
-            cell = game.board[row][col]
-            if cell == 0:
-                symbol = "·"
-                color = "\033[90m"  # Gray for empty cells
-            elif cell == 1:
-                symbol = "X"
-                color = "\033[91m"  # Red for Player 1
-            else:
-                symbol = "O"
-                color = "\033[94m"  # Blue for Player 2
-            print(f"{color}{symbol}\033[0m", end="")
-            if col < size - 1:
-                # Check if there's a horizontal connection
-                if (row, col, 1) in moves_history and (row, col + 1, 1) in moves_history:
-                    print("\033[91m───\033[0m", end="")  # Red connection
-                elif (row, col, 2) in moves_history and (row, col + 1, 2) in moves_history:
-                    print("\033[94m───\033[0m", end="")  # Blue connection
-                else:
-                    print("───", end="")
-        print()
-
-        # Conexiones inter-filas
-        if row < size - 1:
-            print(" " * (indent + cell_width // 2 + 1), end="")
-            for col in range(size):
-                if col < size - 1:
-                    # Check diagonal connections
-                    if (row, col, 1) in moves_history and (row + 1, col + 1, 1) in moves_history:
-                        print("\033[91m╲   ╱\033[0m", end="")  # Red diagonal connection
-                    elif (row, col, 2) in moves_history and (row + 1, col + 1, 2) in moves_history:
-                        print("\033[94m╲   ╱\033[0m", end="")  # Blue diagonal connection
-                    else:
-                        print("╲   ╱", end="")
-                else:
-                    if (row, col, 1) in moves_history and (row + 1, col, 1) in moves_history:
-                        print("\033[91m╲\033[0m", end="")  # Red vertical connection
-                    elif (row, col, 2) in moves_history and (row + 1, col, 2) in moves_history:
-                        print("\033[94m╲\033[0m", end="")  # Blue vertical connection
-                    else:
-                        print("╲", end="")
-            print()
-# def print_hex_board(game: Game.HexBoard):
-#     """Imprime el tablero Hex con alineación correcta y conexiones visuales."""
-#     size = game.size
-#     cell_width = 3
-#     line_width = size * cell_width + (size - 1)
-    
-#     # Encabezado de columnas
-#     print(" " * (cell_width + 1), end="")
-#     for col in range(size):
-#         print(f"{col:2} ", end="")
-#     print("\n")
-
-#     for row in range(size):
-#         # Indentación progresiva para efecto hexagonal
-#         indent = (size - row - 1) * cell_width // 2
-#         print(" " * indent, end="")
-        
-#         # Número de fila
-#         print(f"{row:2} ", end="")
-        
-#         # Contenido de la fila
-#         for col in range(size):
-#             cell = game.board[row][col]
-#             if cell == 0:
-#                 symbol = "·"
-#                 color = "\033[90m"
-#             elif cell == 1:
-#                 symbol = "X"
-#                 color = "\033[91m"
-#             else:
-#                 symbol = "O"
-#                 color = "\033[94m"
-#             print(f"{color}{symbol}\033[0m", end="")
-#             if col < size - 1:
-#                 print("───", end="")
-#         print()
-
-#         # Conexiones inter-filas
-#         if row < size - 1:
-#             print(" " * (indent + cell_width // 2 + 1), end="")
-#             for _ in range(size):
-#                 if row % 2 == 0:
-#                     print("╲   ╱", end="") if _ < size - 1 else print("╲")
-#                 else:
-#                     print("╱   ╲", end="") if _ < size - 1 else print("╱")
-#             print()
-
-
-# def print_hex_board(game:Game):
-#     """Imprime el tablero de hexágonos."""
-#     for i in range(game.size): 
-#         # Q no se printe en diagonal
-#         if i % 2 == 0:
-#             print(" " , end="")
-#         else:
-#             print(" " * 3, end="")
-#         for j in range(game.size):
-#             if game.board[i][j] == 0:
-#                 print(" . ", end="")
-#             elif game.board[i][j] == 1:
-#                 #SI es jugador 1, imprimir circulo rojo
-#                 # print(" X ", end="")
-#                 print(" \033[31mX\033[0m ", end="")
-#             else:
-#                 # print(" O ", end="")
-#                 print(" \033[34mO\033[0m ", end="")
-#         print()
-
-    
 if __name__ == "__main__":
     main()

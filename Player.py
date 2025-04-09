@@ -1,60 +1,19 @@
-from HexBoard import HexBoard
-import random
+from hex_board import HexBoard
 import heapq
-# from copy import deepcopy
+import random
+
 class Player:
     def __init__(self, player_id: int):
-        self.player_id = player_id  # Tu identificador (1 o 2)
+        self.player_id = player_id  # 1 (rojo) or 2 (azul)
 
-    def play(self, board: HexBoard) -> tuple:
-        raise NotImplementedError("¡Implementa este método!")
+    def play(self, board: "HexBoard") -> tuple:
+        raise NotImplementedError("Implement this method!")
     
-class MonteCarloPlayer(Player):
-    def __init__(self, player_id, heuristic=None):
-        super().__init__(player_id)
-        self.heuristic = self.monte_carlo_heuristic if heuristic is None else heuristic
-        
-    def play(self, board: HexBoard) -> tuple:
-        return self.monte_carlo_heuristic(board, self.player_id)   
-           
-    def monte_carlo_heuristic(self, board, player_id):
-        num_simulations = 1000
-        best_move = None
-        best_score = float('-inf')
-        for move in board.get_possible_moves():
-            row, col = move
-            current_player = player_id
-            for _ in range(num_simulations):
-                board_copy = board.clone()
-                board_copy.place_piece(row, col, current_player)
-                current_player = 3 - player_id
-                wins = 0
-                if board_copy.check_connection(current_player) and current_player == player_id:
-                    wins += 1
-                    
-                while True:
-                    possible_moves = board_copy.get_possible_moves()
-                    if not possible_moves:
-                        break
-                    move = random.choice(possible_moves)
-                    row, col = move
-                    board_copy.place_piece(row, col, current_player)
-                    
-                    if board_copy.check_connection(current_player) and current_player == player_id:
-                        wins += 1
-                        break
-                    
-                    current_player = 3 - current_player
-            score = wins / num_simulations
-            if score > best_score:
-                best_score = score
-                best_move = move
-                
-        return best_move
-
+    
 class MiniMaxPlayer(Player):
     def __init__(self, player_id):
         super().__init__(player_id)
+        self.TOP_MOVES = 10  # Número de movimientos a considerar en la heurística
     
     def play(self, board: HexBoard, depth = 6) -> tuple:
         _, best_move = self.minimax(board, depth, -float('inf'), float('inf'), self.player_id, True)
@@ -75,13 +34,15 @@ class MiniMaxPlayer(Player):
             else:
                 return self.heuristic(board, self.player_id), None
         
-        valid_moves = board.get_possible_moves()
+        valid_moves = self.get_ordered_moves(board, player, self.player_id)[: self.TOP_MOVES] #Filtrar por la heurística
+        # valid_moves = board.get_possible_moves()
         if not valid_moves:
             return self.heuristic(board, self.player_id), None
         
         best_move = None
         if maximizing_player:
             max_eval = -float('inf')
+
             for move in valid_moves:
                 row, col = move
                 game_copy = board.clone()
@@ -119,11 +80,60 @@ class MiniMaxPlayer(Player):
                     break
             return min_eval, best_move  
     def check_winner(self, board:HexBoard):
+        """Verifica si hay un ganador en el tablero"""
         if board.check_connection(1): return 1
         if board.check_connection(2): return 2
         return None
     
+    def get_ordered_moves(self, board, player, max_player):
+        """Devuelve una lista de movimientos ordenada por la heurística"""
+        moves = board.get_possible_moves()
+        result = []
+        for i in range(len(moves)):
+            new_board = board.clone()
+            new_board.place_piece(moves[i][0], moves[i][1], player)
+            # winner = self.check_winner(new_board)
+            # if winner == player:
+            #     result.append((float('inf'), moves[i]))  # Movimiento ganador
+            # elif winner == 3 - player:
+            #     result.append((-float('inf'), moves[i]))
+            # else:
+            result.append((self.heuristic(new_board, self.player_id), moves[i]))
+        result.sort(reverse=(player == max_player))
+        return [move for _, move in result]
+        
+        # return sorted(moves,
+        #             key=lambda m: self.heuristic(board.clone().place_piece(m[0], m[1], player), self.player_id), 
+        #             reverse=(player == max_player))
+        # return sorted(moves, 
+        #             key=lambda m: self.heuristic(board.clone().place_piece(m, player), self.player_id), 
+        #             reverse=(player == max_player))
+    
     def heuristic(self, board, player_id):
+        """Heurística que combina la distancia de Dijkstra y el control del centro"""
+        winner = self.check_winner(board)
+        if winner == player_id:
+            return float('inf')
+        if winner == 3 - player_id:
+            return -float('inf')
+        dijkstra_distance = self.dijkstra_heuristic(board, player_id)
+        center_control = self.center_control(board, player_id)
+        enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
+        enemy_center_control = self.center_control(board, 3 - player_id)
+        return 0.7 * dijkstra_distance + 0.3 * center_control - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_center_control
+        
+    def center_control(self, board, player_id):
+        size = board.size
+        center = size // 2
+        score = 0
+        for r in range(size):
+            for c in range(size):
+                if board.board[r][c] == player_id:
+                    # Distancia al centro (inversamente proporcional)
+                    dist_to_center = max(abs(r - center), abs(c - center))
+                    score += 1 / (dist_to_center + 1)  # +1 para evitar división por 0
+        return score
+    def dijkstra_heuristic(self, board, player_id):
         """Busca la distancia mas corta usando Dijkstra"""
         size = board.size
         heap = []
@@ -145,22 +155,23 @@ class MiniMaxPlayer(Player):
                     heapq.heappush(heap, (0, 0, col))
                     distances[0][col] = 0
         
-        directions_fila_par = [
-            (-1, 0),  # Arriba
-            (1, 0),   # Abajo
-            (0, -1),  # Izquierda
-            (0, 1),   # Derecha
-            (-1, 1),  # Arriba-Derecha
-            (1, 1)    # Abajo-Derecha
+        # directions_fila_par = [
+        #     (-1, 0),  # Arriba
+        #     (1, 0),   # Abajo
+        #     (0, -1),  # Izquierda
+        #     (0, 1),   # Derecha
+        #     (-1, 1),  # Arriba-Derecha
+        #     (1, 1)    # Abajo-Derecha
+        # ]
+        directions = [
+            (0, -1),   # Izquierda
+            (0, 1),    # Derecha
+            (-1, 0),   # Arriba
+            (1, 0),    # Abajo
+            (-1, 1),   # Arriba derecha
+            (1, -1)    # Abajo izquierda
         ]
-        directions_fila_impar = [
-            (-1, 0),  # Arriba
-            (1, 0),   # Abajo
-            (0, -1),  # Izquierda
-            (0, 1),   # Derecha
-            (-1, -1), # Arriba-Izquierda
-            (1, -1)   # Abajo-Izquierda
-        ]
+
         
         while heap:
             distance, r, c = heapq.heappop(heap)
@@ -171,7 +182,7 @@ class MiniMaxPlayer(Player):
             if player_id == 1 and c == size - 1 or player_id == 2 and r == size - 1:
                 return -distance
             
-            directions = directions_fila_par if r % 2 == 0 else directions_fila_impar
+            # directions = directions_fila_par if r % 2 == 0 else directions_fila_impar
             
             for dr, dc in directions:
                 nr, nc = r + dr, c + dc
@@ -182,86 +193,3 @@ class MiniMaxPlayer(Player):
                         distances[nr][nc] = new_dist
                         heapq.heappush(heap, (new_dist, nr, nc))
         return -float('inf')
-    
-    # def heuristic(self, board, player_id):
-    #     initials = []
-    #     finals = []
-    #     if player_id == 1:
-    #         for row in range(board.size):
-    #             initials.append((row, 0))
-    #             finals.append((row, board.size - 1))
-    #     else:
-    #         for col in range(board.size):
-    #             initials.append((0, col))
-    #             finals.append((board.size - 1, col))
-    #     return self.bfs(board, player_id, initials, finals)
-            
-    # def bfs(self, board, player_id, initials: list[tuple], finals: list[tuple]):
-    #     stack = []
-    #     # mask = [[-float('inf') for _ in range(board.size)] for _ in range(board.size)]
-    #     for element in initials:
-    #         # mask[element[0]][element[1]] = 0
-    #         stack.append((element, 0))
-    #     visited = set()
-    #     visited.update(initials)
-    #     max_distance = 0
-    #     end = False
-    #     while stack:
-    #         ((r, c), distance) = stack.pop(0)
-    #         if r % 2 == 0:
-    #             directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, 1)]
-    #         else:
-    #             directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1)]
-    #         for dr, dc in directions:
-    #             nr, nc = r + dr, c + dc
-    #             if self.is_in_bounds(board, nr, nc) and not (nr, nc) in visited:
-    #                 if board.board[nr][nc] == 0:
-    #                     # if mask[nr][nc] != -float('inf'): 
-    #                     #     mask[nr][nc] = min(mask[nr][nc], distance + 1)
-    #                     #     continue
-    #                     # mask[nr][nc] = distance
-    #                     stack.append(((nr, nc), distance + 1))
-    #                     visited.add((nr, nc))
-    #                     if (nr, nc) in finals:
-    #                         max_distance = max(max_distance, distance + 1)
-    #                         end = True
-    #                         break
-    #                 if board.board[nr][nc] == player_id:
-    #                     stack.append(((nr, nc), distance + 1))
-    #                     visited.add((nr, nc))
-    #                     if (nr, nc) in finals:
-    #                         max_distance = max(max_distance, distance + 1)
-    #                         end = True
-    #                         break
-    #                     #tirar dfs por las casillas de mi color, visitarlas y agragarlas al stack
-    #                     self.dfs(board, player_id, (nr, nc), stack, visited, distance + 1)
-    #                     for element in visited:
-    #                         if element in finals:
-    #                             max_distance = max(max_distance, distance + 1)
-    #                             end = True
-    #                             break
-    #         if end:
-    #             break
-    #     return max_distance   
-    #     #return max distance in stack
-
-    # def dfs(self, board, player_id, move, bfs_stack, visited, distance):
-    #     stack = []
-    #     stack.append(move)
-    #     visited.add(move)
-    #     while stack:
-    #         r, c = stack.pop()
-    #         if r % 2 == 0:
-    #             directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, 1)]
-    #         else:
-    #             directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1)]
-    #         for dr, dc in directions:
-    #             nr, nc = r + dr, c + dc
-    #             if self.is_in_bounds(board, nr, nc) and not (nr, nc) in visited:
-    #                 if board.board[nr][nc] == player_id:
-    #                     stack.append((nr, nc))
-    #                     bfs_stack.append(((nr, nc), distance))
-    #                     visited.add((nr, nc))
-                        
-    # def is_in_bounds(self, board, r, c):
-    #     return 0 <= r < board.size and 0 <= c < board.size
