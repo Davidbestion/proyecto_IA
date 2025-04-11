@@ -71,7 +71,7 @@ def main():
                 continue
             board.place_piece(row, col, current_player)
         else:
-            move = player_objects[current_player].play(board)
+            move = player_objects[current_player].play(board, time=10)
             print(f"La IA juega en la posición: {move}")
             board.place_piece(move[0], move[1], current_player)
 

@@ -1,7 +1,9 @@
+from pyparsing import empty
 from hex_board import HexBoard
 import heapq
 import random
-from itertools import combinations
+# from itertools import combinations
+import time
 
 class Player:
     def __init__(self, player_id: int):
@@ -10,11 +12,25 @@ class Player:
     def play(self, board: "HexBoard") -> tuple:
         raise NotImplementedError("Implement this method!")
     
+# def timer_decorator(func):
+#     from functools import wraps
     
+#     @wraps(func)
+#     def wrapper(*args, **kwargs):
+#         start_time = time.time()
+#         result = func(*args, **kwargs)
+#         end_time = time.time()
+#         elapsed_time = end_time - start_time
+#         print(f" {elapsed_time:.4f} segundos")
+#         if elapsed_time >= 10:
+#             raise Exception("Tiempo excedido")
+#         return result
+#     return wrapper
+
 class MiniMaxPlayer(Player):
     def __init__(self, player_id):
         super().__init__(player_id)
-        self.TOP_MOVES = 15  # Número de movimientos a considerar en la heurística
+        self.TOP_MOVES = 8  # Número de movimientos a considerar en la heurística
         self.directions = [
             (0, -1),   # Izquierda
             (0, 1),    # Derecha
@@ -23,8 +39,9 @@ class MiniMaxPlayer(Player):
             (-1, 1),   # Arriba derecha
             (1, -1)    # Abajo izquierda
         ]
-    
-    def play(self, board: HexBoard, depth = 6) -> tuple:
+
+    # @timer_decorator
+    def play(self, board: HexBoard, time, depth = 3) -> tuple:
         _, best_move = self.minimax(board, depth, -float('inf'), float('inf'), self.player_id, True)
         if best_move is None and board.get_possible_moves(): #SI best_move es None, significa que siempre pierdo. Solucion: jugar random...
             best_move = random.choice(board.get_possible_moves())
@@ -41,9 +58,9 @@ class MiniMaxPlayer(Player):
             elif winner == 3 - self.player_id:  # El otro jugador siempre minimiza
                 return -float('inf'), None
             else:
-                return self.heuristic(board, self.player_id), None
+                return self.heuristic(board, self.player_id, maximizing_player), None
         
-        valid_moves = self.get_ordered_moves(board, player, self.player_id)[: self.TOP_MOVES] #Filtrar por la heurística
+        valid_moves = self.get_ordered_moves(board, player, maximizing_player)[: self.TOP_MOVES] #Filtrar por la heurística
         # valid_moves = board.get_possible_moves()
         if not valid_moves:
             return self.heuristic(board, self.player_id), None
@@ -101,18 +118,12 @@ class MiniMaxPlayer(Player):
         for i in range(len(moves)):
             new_board = board.clone()
             new_board.place_piece(moves[i][0], moves[i][1], player)
-            # winner = self.check_winner(new_board)
-            # if winner == player:
-            #     result.append((float('inf'), moves[i]))  # Movimiento ganador
-            # elif winner == 3 - player:
-            #     result.append((-float('inf'), moves[i]))
-            # else:
-            result.append((self.heuristic(new_board, self.player_id), moves[i]))
-        result.sort(reverse=(player == max_player))
+            result.append((self.heuristic(new_board, self.player_id, max_player), moves[i]))
+        result.sort(reverse=(max_player))
         return [move for _, move in result]
         
     
-    def heuristic(self, board, player_id):
+    def heuristic(self, board, player_id, maximizing_player:bool):
         """Heurística que combina la distancia de Dijkstra y el control del centro"""
         winner = self.check_winner(board)
         if winner == player_id:
@@ -121,36 +132,16 @@ class MiniMaxPlayer(Player):
             return -float('inf')
         
         dijkstra_distance = self.dijkstra_heuristic(board, player_id)
-        # center_control = self.center_control(board, player_id)
         my_bridges = self.find_bridges(board, player_id)
         
-        # enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
-        # enemy_center_control = self.center_control(board, 3 - player_id)
-        # enemy_bridges = self.find_bridges(board, 3 - player_id)
+        enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
+        enemy_bridges = self.find_bridges(board, 3 - player_id)
         
-        if my_bridges == 0:
-            my_h = dijkstra_distance
+        if maximizing_player:
+            return 0.7 * dijkstra_distance + 0.3 * my_bridges - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_bridges
         else:
-            my_h = 0.6 * dijkstra_distance + 0.4 * my_bridges
+            return 0.7 * enemy_dijkstra_distance + 0.3 * enemy_bridges - 0.3 * dijkstra_distance - 0.7 * my_bridges
         
-        # if enemy_bridges == 0:
-        #     enemy_h = enemy_dijkstra_distance
-        # else:
-        #     enemy_h = 0.6 * enemy_dijkstra_distance + 0.4 * enemy_bridges
-        return my_h #- enemy_h
-        # return 0.7 * dijkstra_distance + 0.3 * center_control - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_center_control
-        
-    def center_control(self, board, player_id):
-        size = board.size
-        center = size // 2
-        score = 0
-        for r in range(size):
-            for c in range(size):
-                if board.board[r][c] == player_id:
-                    # Distancia al centro (inversamente proporcional)
-                    dist_to_center = max(abs(r - center), abs(c - center))
-                    score += 1 / (dist_to_center + 1)  # +1 para evitar división por 0
-        return score
     def dijkstra_heuristic(self, board, player_id):
         """Busca la distancia mas corta usando Dijkstra"""
         size = board.size
@@ -158,38 +149,17 @@ class MiniMaxPlayer(Player):
         distances = [[float('inf')] * size for _ in range(size)]
         for row in range(size):
             for col in range(size):
+                if player_id == 1 and row == 0 and board.board[row][col] == player_id:
+                    heapq.heappush(heap, (0, 0, col))
+                    distances[0][col] = 0
+                if player_id == 2 and col == 0 and board.board[row][col] == player_id:
+                    heapq.heappush(heap, (0, row, 0))
+                    distances[row][0] = 0
+                    
+                    
                 if board.board[row][col] == (3 - player_id):
                     distances[row][col] = -1
         visited = [[False] * size for _ in range(size)]
-        
-        if player_id == 1:
-            for row in range(size):
-                if board.board[row][0] == player_id:
-                    heapq.heappush(heap, (0, row, 0))
-                    distances[row][0] = 0
-        else:
-            for col in range(size):
-                if board.board[0][col] == player_id:
-                    heapq.heappush(heap, (0, 0, col))
-                    distances[0][col] = 0
-        
-        # directions_fila_par = [
-        #     (-1, 0),  # Arriba
-        #     (1, 0),   # Abajo
-        #     (0, -1),  # Izquierda
-        #     (0, 1),   # Derecha
-        #     (-1, 1),  # Arriba-Derecha
-        #     (1, 1)    # Abajo-Derecha
-        # ]
-        # directions = [
-        #     (0, -1),   # Izquierda
-        #     (0, 1),    # Derecha
-        #     (-1, 0),   # Arriba
-        #     (1, 0),    # Abajo
-        #     (-1, 1),   # Arriba derecha
-        #     (1, -1)    # Abajo izquierda
-        # ]
-
         
         while heap:
             distance, r, c = heapq.heappop(heap)
@@ -197,10 +167,8 @@ class MiniMaxPlayer(Player):
                 continue
             visited[r][c] = True
             
-            if player_id == 1 and c == size - 1 or player_id == 2 and r == size - 1:
+            if player_id == 1 and r == size - 1 or player_id == 2 and c == size - 1:
                 return -distance
-            
-            # directions = directions_fila_par if r % 2 == 0 else directions_fila_impar
             
             for dr, dc in self.directions:
                 nr, nc = r + dr, c + dc
@@ -219,42 +187,24 @@ class MiniMaxPlayer(Player):
             if 0 <= nr < board.size and 0 <= nc < board.size and board.board[nr][nc] == 0:
                 ady.append((nr,nc))
         return ady
-            
-    # def _get_all_pairs(elements:list):
-    #     return list(itertools.combinations(elements, 2))
-        
     
     def find_bridges(self, board, player_id):
         """Encuentra los puentes en el tablero para el jugador dado"""
         size = board.size
         count_bridges = 0
-        adyacents = {}
-        # player_cells = []
-        # Recolecto las casillas adyacentes a cada casilla en la que he jugado
-        for i in range(size):
-            for j in range(size):
-                if board.board[i][j] != player_id: continue
-                # if not (i,j) in adyacents.keys():
-                # player_cells.append((i,j))
-                adyacents[(i,j)] = self._get_empty_adyacents(board, i, j)
-
-        for (c1, c2) in combinations(adyacents.keys(), 2):
-            if abs(c1[0] - c2[0]) <= 2 and abs(c1[1] - c2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
-                # Verifico si hay un puente entre ellos
-                # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
-                # Luego, hay un puente entre ellos
-                if len(set(adyacents[c1]).intersection(set(adyacents[c2]))) >= 2:
-                    count_bridges += 1
-                    
-                    
-        # for element1 in adyacents.keys():
-        #     for element2 in adyacents.keys():
-        #         if element1 != element2 and abs(element1[0] - element2[0]) <= 2 and abs(element1[1] - element2[1]) <= 2: # Si estan a menos de 2 casillas de distancia
-        #             # Verifico si hay un puente entre ellos
-        #             # Si ambos elementos (casillas jugadas por mi) tienen 2 adyacentes en comun, entonces hay dos caminos de tamano 1 entre ellos
-        #             # Luego, hay un puente entre ellos
-        #             if len(set(adyacents[element1]).intersection(set(adyacents[element2]))) == 2:
-        #                 count_bridges += 1
+        player_cells = [(i, j) for i in range(size) for j in range(size) if board.board[i][j] == player_id]
+    
+        # Verificación más eficiente de vecindad
+        for i in range(len(player_cells)):
+            for j in range(i+1, len(player_cells)):
+                (x1, y1), (x2, y2) = player_cells[i], player_cells[j]
+                #Si se encuentran en una distancia de 2 o menos
+                if abs(x1 - x2) <= 2 and abs(y1 - y2) <= 2:
+                    #Buscar las casillas adyacentes en comun
+                    common = set(self._get_empty_adyacents(board, x1, y1)).intersection(set(self._get_empty_adyacents(board, x2, y2)))
+                    #Si hay dos => hay dos caminos de tamano 1 entre ambas => un puente.
+                    if len(common) >= 2:
+                        count_bridges += 1     
         return count_bridges
                         
         
