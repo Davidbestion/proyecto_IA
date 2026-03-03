@@ -39,11 +39,11 @@ class HexBoard:
         space = ""
         print(space , end="     ")
         for i in range(self.size):
-            print(f"\033[31m{i}  \033[0m", end=" ")
+            print(f"\033[34m{i}  \033[0m", end=" ")
         print("\n")
         for i in range(self.size):
             print(space , end=" ")
-            print(f"\033[34m{i}  \033[0m",end=" ")
+            print(f"\033[31m{i}  \033[0m",end=" ")
             for j in range(self.size):
                 if self.board[i][j] == 0:
                     print("⬜ ",end=" ")
@@ -52,12 +52,12 @@ class HexBoard:
                 if self.board[i][j] == 2:
                     print("🟦 ",end=" ")
                 if j == self.size -1:
-                    print(f"\033[34m {i} \033[0m",end=" ")
+                    print(f"\033[31m {i} \033[0m",end=" ")
             space += "  "
             print("\n")
         print(space,end="    ")
         for i in range(self.size):
-            print(f"\033[31m{i}  \033[0m", end=" ")
+            print(f"\033[34m{i}  \033[0m", end=" ")
             
                 
                     

@@ -49,22 +49,26 @@ class SmartPlayer(Player):
         self.start_time = time.time()
         self.time_limit = TIME_LIMIT
         
-        # Calcular número de movimientos posibles
+        # Calcular número de movimientos posibles y ratio respecto al tablero total
         num_moves = len(board.get_possible_moves())
+        total_cells = board.size * board.size
+        ratio = num_moves / total_cells  # fracción de casillas vacías restantes
         
-        # Ajustar TOP_MOVES y depth según la fase del juego
-        if num_moves > 50:  # Inicio: muchas opciones, branching explosivo
-            self.top_moves = min(6, num_moves)  # Limitar agresivamente
+        # Ajustar TOP_MOVES y depth según la fase del juego (relativo al tamaño del tablero)
+        # Balance: menos profundidad → más ramas (mas casillas libres, menos decisiva la heurística)
+        #          más profundidad → menos ramas (menos casillas libres, heurística más confiable)
+        if ratio > 0.95:      # Inicio: muchas casillas vacías, árbol explosivo
+            self.top_moves = min(15, num_moves)
             initial_depth = 3
-        elif num_moves > 30:  # Principio-medio: balancear
-            self.top_moves = min(8, num_moves)
-            initial_depth = 3
-        elif num_moves > 15:  # Medio-final: más opciones
+        elif ratio > 0.87:    # Principio-medio: balance
             self.top_moves = min(10, num_moves)
             initial_depth = 4
-        else:  # Final: pocas opciones, explorar todas o casi todas
-            self.top_moves = min(15, num_moves)  # Prácticamente todas
+        elif ratio > 0.80:    # Medio-final: reducir ramas, aumentar profundidad
+            self.top_moves = min(7, num_moves)
             initial_depth = 5
+        else:                 # Final: pocas casillas, heurística confiable
+            self.top_moves = min(num_moves, 5)
+            initial_depth = 6
         
         best_move = None
         
@@ -98,9 +102,9 @@ class SmartPlayer(Player):
             else:
                 return self.heuristic(board, self.player_id, maximizing_player), None
 
-        valid_moves = self.get_ordered_moves(board, player, maximizing_player)[: self.top_moves] #Filtrar por la heurística
-        # valid_moves = board.get_possible_moves()
+        valid_moves = self.get_ordered_moves(board, player, maximizing_player)[: self.top_moves] # Filtrar por la heurística y limitar a top_moves
         if not valid_moves:
+            # Si no hay movimientos válidos, evaluamos la posición actual
             return self.heuristic(board, self.player_id, maximizing_player), None
 
         best_move = None
@@ -162,40 +166,53 @@ class SmartPlayer(Player):
         return [move for _, move in result]
 
     def heuristic(self, board, player_id, maximizing_player: bool):
-        """Heurística que combina la distancia de Dijkstra y el control del centro"""
+        """
+        Heurística que combina la distancia de Dijkstra y los puentes.
+        SIEMPRE devuelve la puntuación desde la perspectiva de player_id.
+        El minimax se encarga de maximizar/minimizar; esta función solo dice
+        "qué tan buena es esta posición para player_id".
+        """
         winner = self.check_winner(board)
         if winner == player_id:
             return float('inf')
         if winner == 3 - player_id:
             return -float('inf')
 
-        dijkstra_distance = self.dijkstra_heuristic(board, player_id)
-        my_bridges = self.find_bridges(board, player_id)
+        # dijkstra devuelve -distancia: más cercano a 0 = mejor para el jugador
+        my_dist = self.dijkstra_heuristic(board, player_id)
+        enemy_dist = self.dijkstra_heuristic(board, 3 - player_id)
 
-        enemy_dijkstra_distance = self.dijkstra_heuristic(board, 3 - player_id)
+        my_bridges = self.find_bridges(board, player_id)
         enemy_bridges = self.find_bridges(board, 3 - player_id)
 
-        if maximizing_player:
-            return 0.7 * dijkstra_distance + 0.3 * my_bridges - 0.3 * enemy_dijkstra_distance - 0.7 * enemy_bridges
-        else:
-            return 0.7 * enemy_dijkstra_distance + 0.3 * enemy_bridges - 0.3 * dijkstra_distance - 0.7 * my_bridges
+        # Pesos simétricos: avanzar propio y bloquear enemigo tienen el mismo valor.
+        # (my_dist - enemy_dist): positivo cuando enemy_path > my_path (yo estoy más cerca)
+        # Los puentes se añaden como bonus secundario
+        return 0.7 * (my_dist - enemy_dist) + 0.3 * (my_bridges - enemy_bridges)
 
     def dijkstra_heuristic(self, board, player_id):
-        """Busca la distancia mas corta usando Dijkstra"""
+        """
+        Busca el camino más corto de un borde al otro usando Dijkstra.
+        Siembra desde TODAS las casillas del borde inicial:
+          - Casillas propias: coste 0 (ya ocupadas, no hay que hacer nada)
+          - Casillas vacías:  coste 1 (hay que colocar una ficha)
+          - Casillas enemigas: se saltan (no se puede pasar por ahí)
+        Retorna -distancia: más cercano a 0 es mejor.
+        """
         size = board.size
         heap = []
         distances = [[float('inf')] * size for _ in range(size)]
-        for row in range(size):
-            for col in range(size):
-                if player_id == 1 and col == 0 and board.board[row][col] == player_id:  # player1: izq->der
-                    heapq.heappush(heap, (0, row, 0))
-                    distances[row][0] = 0
-                if player_id == 2 and row == 0 and board.board[row][col] == player_id:  # player2: arr->abajo
-                    heapq.heappush(heap, (0, 0, col))
-                    distances[0][col] = 0
 
-                if board.board[row][col] == (3 - player_id):
-                    distances[row][col] = -1
+        # Sembrar desde todo el borde inicial del jugador
+        for i in range(size):
+            row, col = (i, 0) if player_id == 1 else (0, i)  # player1: col0; player2: fila0
+            cell = board.board[row][col]
+            if cell == (3 - player_id):  # casilla enemiga en el borde: no podemos empezar aquí
+                continue
+            cost = 0 if cell == player_id else 1  # propia=gratis, vacía=1 ficha
+            distances[row][col] = cost
+            heapq.heappush(heap, (cost, row, col))
+
         visited = [[False] * size for _ in range(size)]
 
         while heap:
@@ -204,18 +221,22 @@ class SmartPlayer(Player):
                 continue
             visited[r][c] = True
 
-            if player_id == 1 and c == size - 1 or player_id == 2 and r == size - 1:
+            # Comprobar si llegamos al borde opuesto
+            if (player_id == 1 and c == size - 1) or (player_id == 2 and r == size - 1):
                 return -distance
-            
+
             for dr, dc in self.directions:
                 nr, nc = r + dr, c + dc
-                if 0 <= nr < size and 0 <= nc < size and distances[nr][nc] != -1:
-                    cost = 0 if board.board[nr][nc] == player_id else 1
+                if 0 <= nr < size and 0 <= nc < size:
+                    cell = board.board[nr][nc]
+                    if cell == (3 - player_id):  # casilla enemiga: bloqueada
+                        continue
+                    cost = 0 if cell == player_id else 1
                     new_dist = distance + cost
                     if new_dist < distances[nr][nc]:
                         distances[nr][nc] = new_dist
                         heapq.heappush(heap, (new_dist, nr, nc))
-        return -float('inf')
+        return -float('inf')  # Sin camino posible (enemigo ha cortado todos los caminos)
 
     def _get_empty_adyacents(self, board, row, col):
         ady = []
