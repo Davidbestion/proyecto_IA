@@ -1,6 +1,6 @@
 import os
-from hex_board import HexBoard
-from Player import MiniMaxPlayer as IAPlayer
+from board import HexBoard
+from solution import SmartPlayer as IAPlayer
 import time
 
 
@@ -71,7 +71,7 @@ def main():
                 continue
             board.place_piece(row, col, current_player)
         else:
-            move = player_objects[current_player].play(board, time=10)
+            move = player_objects[current_player].play(board)
             print(f"La IA juega en la posición: {move}")
             board.place_piece(move[0], move[1], current_player)
 
