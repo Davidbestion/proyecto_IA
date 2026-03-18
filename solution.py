@@ -58,17 +58,17 @@ class SmartPlayer(Player):
         # Balance: menos profundidad → más ramas (mas casillas libres, menos decisiva la heurística)
         #          más profundidad → menos ramas (menos casillas libres, heurística más confiable)
         if ratio > 0.95:      # Inicio: muchas casillas vacías, árbol explosivo
-            self.top_moves = min(15, num_moves)
-            initial_depth = 3
-        elif ratio > 0.87:    # Principio-medio: balance
-            self.top_moves = min(10, num_moves)
+            self.top_moves = min(20, num_moves)
             initial_depth = 4
-        elif ratio > 0.80:    # Medio-final: reducir ramas, aumentar profundidad
-            self.top_moves = min(7, num_moves)
+        elif ratio > 0.87:    # Principio-medio: balances
+            self.top_moves = min(15, num_moves)
             initial_depth = 5
-        else:                 # Final: pocas casillas, heurística confiable
-            self.top_moves = min(num_moves, 5)
+        elif ratio > 0.80:    # Medio-final: reducir ramas, aumentar profundidad
+            self.top_moves = min(12, num_moves)
             initial_depth = 6
+        else:                 # Final: pocas casillas, heurística confiable
+            self.top_moves = min(10, num_moves)
+            initial_depth = 7
         
         best_move = None
         
