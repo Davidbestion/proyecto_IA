@@ -5,7 +5,7 @@ import random
 # from itertools import combinations
 import time
 
-# Tiempo límite en segundos para cada jugada (margen de seguridad vs 5s del torneo)
+# Tiempo límite en segundos para cada jugada 
 TIME_LIMIT = 4.5
 
 class TimeoutException(Exception):
@@ -60,13 +60,13 @@ class SmartPlayer(Player):
         if ratio > 0.95:      # Inicio: muchas casillas vacías, árbol explosivo
             self.top_moves = min(20, num_moves)
             initial_depth = 4
-        elif ratio > 0.87:    # Principio-medio: balances
+        elif ratio > 0.87:    
             self.top_moves = min(15, num_moves)
             initial_depth = 5
-        elif ratio > 0.80:    # Medio-final: reducir ramas, aumentar profundidad
+        elif ratio > 0.80:    
             self.top_moves = min(12, num_moves)
             initial_depth = 6
-        else:                 # Final: pocas casillas, heurística confiable
+        else:                 
             self.top_moves = min(10, num_moves)
             initial_depth = 7
         
@@ -221,7 +221,7 @@ class SmartPlayer(Player):
                 continue
             visited[r][c] = True
 
-            # Comprobar si llegamos al borde opuesto
+            # Comprobar si llego al borde opuesto
             if (player_id == 1 and c == size - 1) or (player_id == 2 and r == size - 1):
                 return -distance
 
